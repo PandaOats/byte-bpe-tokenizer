@@ -48,8 +48,13 @@ def encode_chunk_frequencies(chunk_frequencies: dict[str, int]) -> dict[tuple[in
     return encoded_freq
 
 # Count the occurences of pair of neighboring token IDs
-def calc_pair_frequency(token_ids: list[int]) -> dict[tuple[int, int], int]:
-    pass
+def calc_pair_frequency(encoded_freq: dict[tuple[int, ...], int]) -> dict[tuple[int, int], int]:
+    pair_freq = Counter()
+    for encodings, freq in encoded_freq.items():
+        for i in range(len(encodings) - 1):
+            pair_freq[encodings[i], encodings[i + 1]] += freq
+
+    return pair_freq
 
 # Replace token_ids matches of a pair with a new token ID
 def merge_pair(token_ids: list[int], pair: tuple[int, int], new_id: int) -> list[int]:
@@ -160,6 +165,28 @@ if __name__ == "__main__":
         assert encode_chunk_frequencies({"é": 4, "🙄": 1}) == {
             (195, 169): 4,
             (240, 159, 153, 132): 1,
+        }
+
+        # ----- calc_pair_frequency() -----
+
+        # Empty and single-token inputs
+        assert calc_pair_frequency({}) == {}
+        assert calc_pair_frequency({(97,): 3}) == {}
+
+        # Repeated pairs, ordering, and frequency weighting
+        assert calc_pair_frequency({(97, 98, 97, 98): 3}) == {
+            (97, 98): 6,
+            (98, 97): 3,
+        }
+
+        # Overlapping occurrences
+        assert calc_pair_frequency({(97, 97, 97): 2}) == {
+            (97, 97): 4,
+        }
+
+        # Learned token IDs above 255
+        assert calc_pair_frequency({(256, 257): 1}) == {
+            (256, 257): 1,
         }
 
         print("UNIT TEST PASSED")
