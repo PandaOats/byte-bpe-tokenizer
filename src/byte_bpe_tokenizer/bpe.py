@@ -1,26 +1,41 @@
 import string
 from collections import Counter
 
+# Count word chunks and punctuation runs while skipping whitespace
 def split_count_text(text:str) -> dict:
     freq = Counter()
-    start = 0
-    
-    for i, char in enumerate(text):
-        next_is_boundary = (
-            i + 1 == len(text)
-            or text[i + 1] in string.whitespace
-            or text[i + 1] in string.punctuation
-        )
+    current_chunk_start = 0
+    walker = 0
 
-        if (char in string.whitespace 
-            or char in string.punctuation and next_is_boundary):
-            if start != i:
-                freq[text[start:i]] += 1
-            freq[char] += 1
-            start = i + 1
+    while walker < len(text):
+        if text[walker] in string.whitespace:
+            if current_chunk_start != walker:
+                freq[text[current_chunk_start:walker]] += 1
+            
+            walker += 1
+            while walker < len(text) and text[walker] in string.whitespace:
+                walker += 1
+            
+            current_chunk_start = walker
 
-    if start != len(text):
-        freq[text[start:]] += 1
+        elif text[walker] in string.punctuation:
+            if current_chunk_start != walker:
+                freq[text[current_chunk_start:walker]] += 1
+
+            current_chunk_start = walker
+            walker += 1
+            while walker < len(text) and text[walker] in string.punctuation:
+                walker += 1
+            freq[text[current_chunk_start:walker]] += 1
+
+            current_chunk_start = walker
+
+        else: 
+            walker += 1
+
+    if current_chunk_start != len(text):
+        freq[text[current_chunk_start:walker]] += 1
+            
 
     return freq
 
@@ -67,7 +82,11 @@ if __name__ == "__main__":
             print("----- text_to_byte_ids() -----\n", text_to_byte_ids(testWord))
 
         if do_split:
-            print([(key, value) for key, value in split_count_text(" ---!mkfasfona asd'asdasd'a.  \t").items()])
+            blank = ""
+            many_punctutation = "!.???"
+            scramble = "asndjia/.,,asdsd.,as,d/.as,"
+            scramble_w_space = "sadna sasd ;;; asd;; a(;)"
+            print([(key, value) for key, value in split_count_text(testString).items()])
 
 
     if UNIT_TEST:
@@ -81,33 +100,45 @@ if __name__ == "__main__":
         # Empty input
         assert split_count_text("") == {}
 
+        # Whitespace-only input
+        assert split_count_text(" \t\n") == {}
+
         # Repeated words
         assert split_count_text("hello hello") == {
             "hello": 2,
-            " ": 1,
         }
 
         # Leading, repeated, and trailing whitespace
         assert split_count_text(" a  b\n") == {
-            " ": 3,
             "a": 1,
             "b": 1,
-            "\n": 1,
         }
 
-        # Punctuation
+        # Punctuation separated from words
         assert split_count_text("hi, there!") == {
             "hi": 1,
             ",": 1,
-            " ": 1,
             "there": 1,
             "!": 1,
         }
 
+        # Consecutive punctuation grouped together
         assert split_count_text("hi?!") == {
             "hi": 1,
-            "?": 1,
+            "?!": 1,
+        }
+
+        # Whitespace immediately after punctuation
+        assert split_count_text("hi! there ") == {
+            "hi": 1,
             "!": 1,
+            "there": 1,
+        }
+
+        # Repeated words and punctuation runs without whitespace
+        assert split_count_text("hi!!hi!!") == {
+            "hi": 2,
+            "!!": 2,
         }
 
         print("UNIT TEST PASSED")
