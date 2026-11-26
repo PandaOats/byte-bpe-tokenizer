@@ -58,7 +58,18 @@ def calc_pair_frequency(encoded_freq: dict[tuple[int, ...], int]) -> dict[tuple[
 
 # Replace token_ids matches of a pair with a new token ID
 def merge_pair(token_ids: list[int], pair: tuple[int, int], new_id: int) -> list[int]:
-    pass
+    merged_ids = []
+    i = 0
+
+    while i < len(token_ids):
+        if i + 1 < len(token_ids) and (token_ids[i], token_ids[i + 1]) == pair:
+            merged_ids.append(new_id)
+            i += 2
+        else:
+            merged_ids.append(token_ids[i])
+            i += 1
+
+    return merged_ids
 
 
 if __name__ == "__main__":
@@ -188,5 +199,20 @@ if __name__ == "__main__":
         assert calc_pair_frequency({(256, 257): 1}) == {
             (256, 257): 1,
         }
+
+        # ----- merge_pair() -----
+
+        # Empty and single-token inputs
+        assert merge_pair([], (97, 98), 256) == []
+        assert merge_pair([97], (97, 98), 256) == [97]
+
+        # Repeated non-overlapping matches
+        assert merge_pair([97, 98, 97, 98], (97, 98), 256) == [256, 256]
+
+        # Unmatched tokens are preserved
+        assert merge_pair([99, 97, 98, 100], (97, 98), 256) == [99, 256, 100]
+
+        # Overlapping matches are merged from left to right
+        assert merge_pair([97, 97, 97], (97, 97), 256) == [256, 97]
 
         print("UNIT TEST PASSED")
