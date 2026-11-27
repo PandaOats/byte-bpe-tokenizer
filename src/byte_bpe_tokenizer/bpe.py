@@ -40,6 +40,22 @@ def split_count_text(text: str, chunk_freq: Counter[str] | None = None) -> Count
 
     return freq
 
+
+def split_count_file(file_path: str, chunk_freq: Counter[str] | None = None) -> Counter[str]:
+    freq = Counter() if chunk_freq is None else chunk_freq
+    try:
+        with open(file_path, "r", encoding="utf-8") as file:
+            for line in file:
+                split_count_text(line, freq)
+    except FileNotFoundError:
+        print("File not found at: ", file_path)
+        raise
+    except (OSError, UnicodeDecodeError) as error:
+        print(f"Could not read {file_path}: {error}")
+        raise
+
+    return freq
+
 # Convert chunk keys into byte-ID tuples, keeping their frequencies
 def encode_chunk_frequencies(chunk_frequencies: dict[str, int]) -> dict[tuple[int, ...], int]:
     encoded_freq = dict()
@@ -208,6 +224,59 @@ if __name__ == "__main__":
         second_counts = split_count_text("hi!!", None)
         assert first_counts == second_counts == {"hi": 1, "!!": 1}
         assert first_counts is not second_counts
+
+        # ----- split_count_file() -----
+
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "corpus.txt"
+
+            # Count UTF-8 chunks across lines, including a final line without a newline
+            file_path.write_bytes("café!!\r\n\r\ncafé?!\n🙄!!\rfin".encode("utf-8"))
+            assert split_count_file(str(file_path)) == {
+                "café": 2,
+                "!!": 2,
+                "?!": 1,
+                "🙄": 1,
+                "fin": 1,
+            }
+
+            # Update and return the supplied counter
+            chunk_freq = Counter({"café": 3, "existing": 1})
+            assert split_count_file(str(file_path), chunk_freq) is chunk_freq
+            assert chunk_freq == {
+                "café": 5,
+                "existing": 1,
+                "!!": 2,
+                "?!": 1,
+                "🙄": 1,
+                "fin": 1,
+            }
+
+            # Empty files produce no chunks
+            file_path.write_bytes(b"")
+            assert split_count_file(str(file_path)) == {}
+
+            # File and decoding errors reach the caller
+            with redirect_stdout(StringIO()):
+                try:
+                    split_count_file(str(Path(temp_dir) / "missing.txt"))
+                except FileNotFoundError:
+                    pass
+                else:
+                    raise AssertionError("Expected FileNotFoundError for a missing file")
+
+                file_path.write_bytes(b"\xff")
+                try:
+                    split_count_file(str(file_path))
+                except UnicodeDecodeError:
+                    pass
+                else:
+                    raise AssertionError("Expected UnicodeDecodeError for invalid UTF-8")
 
         # ----- encode_chunk_frequencies() -----
 
