@@ -48,7 +48,7 @@ def encode_chunk_frequencies(chunk_frequencies: dict[str, int]) -> dict[tuple[in
     return encoded_freq
 
 # Count the occurences of pair of neighboring token IDs
-def calc_pair_frequency(encoded_freq: dict[tuple[int, ...], int]) -> dict[tuple[int, int], int]:
+def calc_pair_frequency(encoded_freq: dict[tuple[int, ...], int]) -> Counter[tuple[int, int]]:
     pair_freq = Counter()
     for encodings, freq in encoded_freq.items():
         for i in range(len(encodings) - 1):
@@ -70,6 +70,36 @@ def merge_pair(token_ids: list[int], pair: tuple[int, int], new_id: int) -> list
             i += 1
 
     return merged_ids
+
+# Train vocabulary up to vocab_size
+def train_bpe(text: str, vocab_size: int) -> tuple[dict[int, bytes], dict[tuple[int, int], int]]:
+    vocab = {byte_id: bytes([byte_id]) for byte_id in range(256)}
+    merges: dict[tuple[int, int], int] = dict()
+
+    chunk_freq = split_count_text(text)
+    encoded_freq = encode_chunk_frequencies(chunk_freq)
+
+    while len(vocab) < vocab_size:
+        pair_freq = calc_pair_frequency(encoded_freq)
+        if not pair_freq:
+            break
+
+        best_pair, _ = pair_freq.most_common(1)[0]
+        new_id = len(vocab)
+        merges[best_pair] = new_id
+
+        left_id, right_id = best_pair
+        vocab[new_id] = vocab[left_id] + vocab[right_id]
+        
+        # Make new encoded_freq given the merges
+        merged_freq = dict()
+        for token_ids, freq in encoded_freq.items():
+            merged_ids = tuple(merge_pair(list(token_ids), best_pair, new_id))
+            merged_freq[merged_ids] = freq
+
+        encoded_freq = merged_freq
+
+    return vocab, merges
 
 
 if __name__ == "__main__":
@@ -214,5 +244,19 @@ if __name__ == "__main__":
 
         # Overlapping matches are merged from left to right
         assert merge_pair([97, 97, 97], (97, 97), 256) == [256, 97]
+
+        # ----- train_bpe() -----
+
+        # Repeated chunks outweigh a pair that occurs twice in one chunk
+        vocab, merges = train_bpe("xyxy abc abc abc ab", 258)
+        assert len(vocab) == 258
+        assert vocab[256] == b"ab"
+        assert vocab[257] == b"abc"
+        assert merges == {(97, 98): 256, (256, 99): 257}
+
+        # Single-byte chunks have no pairs, even across punctuation and spaces
+        vocab, merges = train_bpe("x! y?", 300)
+        assert vocab == {byte_id: bytes([byte_id]) for byte_id in range(256)}
+        assert merges == {}
 
         print("UNIT TEST PASSED")
