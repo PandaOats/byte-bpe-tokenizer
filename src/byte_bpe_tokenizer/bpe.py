@@ -1,9 +1,10 @@
 import string
 from collections import Counter
 
-# Count word chunks and punctuation runs while skipping whitespace
-def split_count_text(text:str) -> dict:
-    freq = Counter()
+# Count word chunks and punctuation runs while skipping whitespace 
+def split_count_text(text: str, chunk_freq: Counter[str] | None = None) -> Counter[str]:
+    freq = Counter() if chunk_freq is None else chunk_freq
+
     current_chunk_start = 0
     walker = 0
 
@@ -190,6 +191,23 @@ if __name__ == "__main__":
             "hi": 2,
             "!!": 2,
         }
+
+        # Reuse an empty counter and accumulate across calls
+        chunk_freq = Counter()
+        assert split_count_text("hi!! hi", chunk_freq) is chunk_freq
+        assert chunk_freq == {"hi": 2, "!!": 1}
+        assert split_count_text("hi!! there", chunk_freq=chunk_freq) is chunk_freq
+        assert chunk_freq == {"hi": 3, "!!": 2, "there": 1}
+
+        # Whitespace-only input leaves an existing counter's counts intact
+        assert split_count_text(" \t\n", chunk_freq) is chunk_freq
+        assert chunk_freq == {"hi": 3, "!!": 2, "there": 1}
+
+        # Omitted and explicit None each give an independent counter
+        first_counts = split_count_text("hi!!")
+        second_counts = split_count_text("hi!!", None)
+        assert first_counts == second_counts == {"hi": 1, "!!": 1}
+        assert first_counts is not second_counts
 
         # ----- encode_chunk_frequencies() -----
 
