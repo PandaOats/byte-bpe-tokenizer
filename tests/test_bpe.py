@@ -147,15 +147,23 @@ def test_merge_pair(token_ids, pair, expected):
     assert merge_pair(token_ids, pair, 256) == expected
 
 
-def test_train_bpe_weights_repeated_chunks():
-    vocab, merges = train_bpe("xyxy abc abc abc ab", 258)
+def test_train_bpe_weights_repeated_chunks_across_text_and_file(tmp_path: Path):
+    file_path = tmp_path / "training.txt"
+    file_path.write_text("abc abc ab", encoding="utf-8")
+    chunk_freq = split_count_text("xyxy abc")
+    split_count_file(str(file_path), chunk_freq=chunk_freq)
+
+    vocab, merges = train_bpe(chunk_freq, 258)
+
     assert len(vocab) == 258
     assert vocab[256] == b"ab"
     assert vocab[257] == b"abc"
     assert merges == {(97, 98): 256, (256, 99): 257}
+    assert chunk_freq == {"xyxy": 1, "abc": 3, "ab": 1}
 
 
 def test_train_bpe_stops_when_no_pairs_remain():
-    vocab, merges = train_bpe("x! y?", 300)
+    chunk_freq = split_count_text("x! y?")
+    vocab, merges = train_bpe(chunk_freq, 300)
     assert vocab == {byte_id: bytes([byte_id]) for byte_id in range(256)}
     assert merges == {}

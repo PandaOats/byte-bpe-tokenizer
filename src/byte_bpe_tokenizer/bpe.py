@@ -87,11 +87,10 @@ def merge_pair(token_ids: list[int], pair: tuple[int, int], new_id: int) -> list
     return merged_ids
 
 # Train vocabulary up to vocab_size
-def train_bpe(text: str, vocab_size: int) -> tuple[dict[int, bytes], dict[tuple[int, int], int]]:
+def train_bpe(chunk_freq: Counter[str], vocab_size: int) -> tuple[dict[int, bytes], dict[tuple[int, int], int]]:
     vocab = {byte_id: bytes([byte_id]) for byte_id in range(256)}
     merges: dict[tuple[int, int], int] = dict()
 
-    chunk_freq = split_count_text(text)
     encoded_freq = encode_chunk_frequencies(chunk_freq)
 
     while len(vocab) < vocab_size:
