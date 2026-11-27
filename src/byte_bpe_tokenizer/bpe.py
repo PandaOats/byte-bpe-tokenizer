@@ -41,20 +41,18 @@ def split_count_text(text: str, chunk_freq: Counter[str] | None = None) -> Count
     return freq
 
 
-def split_count_file(file_path: str, chunk_freq: Counter[str] | None = None) -> Counter[str]:
-    freq = Counter() if chunk_freq is None else chunk_freq
-    try:
-        with open(file_path, "r", encoding="utf-8") as file:
-            for line in file:
-                split_count_text(line, freq)
-    except FileNotFoundError:
-        print("File not found at: ", file_path)
-        raise
-    except (OSError, UnicodeDecodeError) as error:
-        print(f"Could not read {file_path}: {error}")
-        raise
+def split_count_file(file_path: str, initial_line: int = 0, chunk_freq: Counter[str] | None = None) -> Counter[str]:
+    file_counts: Counter[str] = Counter()
 
-    return freq
+    with open(file_path, "r", encoding="utf-8") as file:
+        for line in file:
+            split_count_text(line, file_counts)
+
+    if chunk_freq is None:
+        return file_counts
+
+    chunk_freq.update(file_counts)
+    return chunk_freq
 
 # Convert chunk keys into byte-ID tuples, keeping their frequencies
 def encode_chunk_frequencies(chunk_frequencies: dict[str, int]) -> dict[tuple[int, ...], int]:
@@ -227,8 +225,6 @@ if __name__ == "__main__":
 
         # ----- split_count_file() -----
 
-        from contextlib import redirect_stdout
-        from io import StringIO
         from pathlib import Path
         from tempfile import TemporaryDirectory
 
@@ -247,7 +243,7 @@ if __name__ == "__main__":
 
             # Update and return the supplied counter
             chunk_freq = Counter({"café": 3, "existing": 1})
-            assert split_count_file(str(file_path), chunk_freq) is chunk_freq
+            assert split_count_file(str(file_path), chunk_freq=chunk_freq) is chunk_freq
             assert chunk_freq == {
                 "café": 5,
                 "existing": 1,
@@ -261,22 +257,29 @@ if __name__ == "__main__":
             file_path.write_bytes(b"")
             assert split_count_file(str(file_path)) == {}
 
-            # File and decoding errors reach the caller
-            with redirect_stdout(StringIO()):
-                try:
-                    split_count_file(str(Path(temp_dir) / "missing.txt"))
-                except FileNotFoundError:
-                    pass
-                else:
-                    raise AssertionError("Expected FileNotFoundError for a missing file")
+            # Missing-file errors reach the caller
+            try:
+                split_count_file(str(Path(temp_dir) / "missing.txt"))
+            except FileNotFoundError:
+                pass
+            else:
+                raise AssertionError("Expected FileNotFoundError for a missing file")
 
-                file_path.write_bytes(b"\xff")
-                try:
-                    split_count_file(str(file_path))
-                except UnicodeDecodeError:
-                    pass
-                else:
-                    raise AssertionError("Expected UnicodeDecodeError for invalid UTF-8")
+            # A late decoding error leaves the supplied counter safe to retry
+            valid_lines = b"hi!!\n" * 10_000
+            file_path.write_bytes(valid_lines + b"\xff")
+            chunk_freq = Counter({"hi": 2, "existing": 1})
+            try:
+                split_count_file(str(file_path), chunk_freq=chunk_freq)
+            except UnicodeDecodeError:
+                pass
+            else:
+                raise AssertionError("Expected UnicodeDecodeError for invalid UTF-8")
+            assert chunk_freq == {"hi": 2, "existing": 1}
+
+            file_path.write_bytes(valid_lines)
+            assert split_count_file(str(file_path), chunk_freq=chunk_freq) is chunk_freq
+            assert chunk_freq == {"hi": 10_002, "!!": 10_000, "existing": 1}
 
         # ----- encode_chunk_frequencies() -----
 
